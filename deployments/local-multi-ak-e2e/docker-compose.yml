@@ -1,0 +1,37 @@
+# 本地 OSS lakeFS + PostgreSQL，用于多 AK/SK 与仓库 API 的端到端验证。
+# 用法：在本目录执行 `docker compose up -d --build`，再运行 `./e2e-multi-ak.sh`。
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: lakefs
+      POSTGRES_PASSWORD: lakefs
+      POSTGRES_DB: postgres
+    # 不映射到宿主机，避免与本机已占用的端口（例如 5433）冲突；lakeFS 仅通过 compose 网络访问 postgres。
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lakefs -d postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  lakefs:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    ports:
+      - "${LAKEFS_HOST_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      LAKEFS_LISTEN_ADDRESS: 0.0.0.0:8000
+      LAKEFS_LOGGING_LEVEL: INFO
+      LAKEFS_STATS_ENABLED: "false"
+      LAKEFS_DATABASE_TYPE: postgres
+      LAKEFS_DATABASE_POSTGRES_CONNECTION_STRING: postgres://lakefs:lakefs@postgres:5432/postgres?sslmode=disable
+      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: "0123456789abcdef0123456789abcdef"
+      LAKEFS_BLOCKSTORE_TYPE: local
+      LAKEFS_BLOCKSTORE_LOCAL_PATH: /tmp/lakefs/block
+      LAKEFS_BLOCKSTORE_LOCAL_IMPORT_ENABLED: "true"
+    # Postgres 就绪后仍可能有极短连接窗口；失败时自动重试几次即可。
+    restart: on-failure:5

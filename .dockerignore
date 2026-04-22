@@ -19,4 +19,4 @@ target/
 test/
 venv/
 webui/node_modules/
-webui/src/
+# webui/src 不能排除：Dockerfile 的 ui-build 阶段需要在镜像内执行 npm run build 以生成 dist 并嵌入 lakefs 二进制。

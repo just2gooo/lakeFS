@@ -68,6 +68,11 @@ func (c *GetSetCache) GetOrSetWithExpiry(k any, setFn SetFnWithExpiry) (v any, e
 	})
 }
 
+// Remove drops a key from the cache if present.
+func (c *GetSetCache) Remove(k any) {
+	c.lru.Remove(k)
+}
+
 func NewJitterFn(jitter time.Duration) JitterFn {
 	if jitter <= 0 {
 		return func() time.Duration {

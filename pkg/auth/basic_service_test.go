@@ -114,9 +114,26 @@ func TestBasicAuthService_Credentials(t *testing.T) {
 	_, err = s.GetCredentials(ctx, creds.AccessKeyID)
 	require.NoError(t, err)
 
-	// Add credentials already exists
-	_, err = s.AddCredentials(ctx, username, accessKeyID, secretAccessKey)
-	require.ErrorIs(t, err, auth.ErrInvalidRequest)
+	// Second access key for the same admin user is allowed (basic auth multi-key).
+	creds2, err := s.AddCredentials(ctx, username, accessKeyID, secretAccessKey)
+	require.NoError(t, err)
+	require.Equal(t, accessKeyID, creds2.AccessKeyID)
+	_, err = s.GetCredentials(ctx, accessKeyID)
+	require.NoError(t, err)
+
+	listed, paginator, err := s.ListUserCredentials(ctx, username, &model.PaginationParams{})
+	require.NoError(t, err)
+	require.Len(t, listed, 2)
+	require.Empty(t, paginator.NextPageToken)
+	for _, c := range listed {
+		require.Empty(t, c.SecretAccessKey)
+	}
+
+	require.NoError(t, s.DeleteCredentials(ctx, username, creds.AccessKeyID))
+	_, err = s.GetCredentials(ctx, creds.AccessKeyID)
+	require.ErrorIs(t, err, auth.ErrNotFound)
+	_, err = s.GetCredentials(ctx, accessKeyID)
+	require.NoError(t, err)
 }
 
 func TestBasicAuthService_CredentialsImport(t *testing.T) {

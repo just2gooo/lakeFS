@@ -21,8 +21,17 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg go mod download
 COPY . ./
 
+# Embedded UI (webui/dist); without this stage, GET / shows "lakeFS UI Not Built".
+FROM node:20-bookworm-slim AS ui-build
+WORKDIR /webui
+COPY webui/package.json webui/package-lock.json ./
+RUN npm ci
+COPY webui/ ./
+RUN npm run build
+
 FROM build AS build-lakefs
 ARG VERSION TARGETOS TARGETARCH ADD_PACKAGES BUILD_PACKAGES
+COPY --from=ui-build /webui/dist ./webui/dist
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \

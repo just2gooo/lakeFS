@@ -53,6 +53,13 @@ func (c *LRUCache) GetCredential(accessKeyID string, setFn CredentialSetFn) (*mo
 	return v.(*model.Credential), nil
 }
 
+// EvictCredential removes a cached credential entry (used after credential delete).
+func (c *LRUCache) EvictCredential(accessKeyID string) {
+	if gsc, ok := c.credentialsCache.(*cache.GetSetCache); ok {
+		gsc.Remove(accessKeyID)
+	}
+}
+
 func (c *LRUCache) GetUser(key UserKey, setFn UserSetFn) (*model.User, error) {
 	v, err := c.userCache.GetOrSet(key, func() (any, error) { return setFn() })
 	if err != nil {

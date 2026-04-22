@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/treeverse/lakefs/pkg/auth/crypt"
@@ -19,7 +22,8 @@ const (
 	BasicPartitionKey     = "basicAuth"
 	SuperAdminKey         = "superAdmin"
 	MaxUsers              = 1
-	MaxCredentialsPerUser = 1
+	// MaxCredentialsPerUser is the maximum S3-style access keys for the single basic-auth admin user.
+	MaxCredentialsPerUser = 10
 )
 
 type BasicAuthService struct {
@@ -241,6 +245,11 @@ func (s *BasicAuthService) AddCredentials(ctx context.Context, username, accessK
 
 	// Handle user import flow from previous auth service
 	if accessKeyID != "" && secretAccessKey == "" {
+		if _, err := s.GetCredentials(ctx, accessKeyID); err == nil {
+			return nil, fmt.Errorf("access key already exists: %w", ErrInvalidRequest)
+		} else if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
 		return s.importUserCredentials(ctx, username, accessKeyID)
 	}
 
@@ -329,10 +338,11 @@ func (s *BasicAuthService) listUserCredentials(ctx context.Context, username, pa
 	defer it.Close()
 
 	entries := make([]proto.Message, 0)
-	for len(entries) <= MaxCredentialsPerUser && it.Next() {
-		entry := it.Entry()
-		value := entry.Value
-		entries = append(entries, value)
+	for it.Next() {
+		entries = append(entries, it.Entry().Value)
+		if len(entries) > MaxCredentialsPerUser {
+			return nil, fmt.Errorf("credentials count exceeds max: %w", ErrInvalidRequest)
+		}
 	}
 	if err = it.Err(); err != nil {
 		return nil, fmt.Errorf("iterate credentials: %w", err)
@@ -437,12 +447,104 @@ func (s *BasicAuthService) ListPolicies(_ context.Context, _ *model.PaginationPa
 	return nil, nil, ErrNotImplemented
 }
 
-func (s *BasicAuthService) DeleteCredentials(_ context.Context, _, _ string) error {
-	return ErrNotImplemented
+func (s *BasicAuthService) DeleteCredentials(ctx context.Context, username, accessKeyID string) error {
+	if _, err := s.GetUser(ctx, username); err != nil {
+		return err
+	}
+	curr, err := s.listUserCredentials(ctx, SuperAdminKey, BasicPartitionKey, "")
+	if err != nil {
+		return err
+	}
+	if len(curr) <= 1 {
+		return fmt.Errorf("cannot delete the last access key: %w", ErrInvalidRequest)
+	}
+	var found bool
+	for _, c := range curr {
+		if c.AccessKeyID == accessKeyID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("credentials %w", ErrNotFound)
+	}
+	credKey := model.CredentialPath(SuperAdminKey, accessKeyID)
+	if err := s.store.Delete(ctx, []byte(BasicPartitionKey), credKey); err != nil {
+		return fmt.Errorf("delete credentials: %w", err)
+	}
+	if lr, ok := s.cache.(*LRUCache); ok {
+		lr.EvictCredential(accessKeyID)
+	}
+	return nil
 }
 
-func (s *BasicAuthService) ListUserCredentials(_ context.Context, _ string, _ *model.PaginationParams) ([]*model.Credential, *model.Paginator, error) {
-	return nil, nil, ErrNotImplemented
+func (s *BasicAuthService) ListUserCredentials(ctx context.Context, username string, params *model.PaginationParams) ([]*model.Credential, *model.Paginator, error) {
+	if params == nil {
+		params = &model.PaginationParams{}
+	}
+	if _, err := s.GetUser(ctx, username); err != nil {
+		return nil, nil, err
+	}
+	all, err := s.listUserCredentials(ctx, SuperAdminKey, BasicPartitionKey, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	filtered := make([]*model.Credential, 0, len(all))
+	for _, c := range all {
+		if params.Prefix != "" && !strings.HasPrefix(c.AccessKeyID, params.Prefix) {
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	slices.SortFunc(filtered, func(a, b *model.Credential) int {
+		return cmp.Compare(a.AccessKeyID, b.AccessKeyID)
+	})
+
+	startIdx := 0
+	if params.After != "" {
+		for i, c := range filtered {
+			if cmp.Compare(c.AccessKeyID, params.After) > 0 {
+				startIdx = i
+				break
+			}
+			startIdx = i + 1
+		}
+	}
+
+	amount := params.Amount
+	if amount <= 0 {
+		amount = len(filtered) - startIdx
+		if amount < 0 {
+			amount = 0
+		}
+	} else if amount > MaxCredentialsPerUser {
+		amount = MaxCredentialsPerUser
+	}
+	if startIdx > len(filtered) {
+		startIdx = len(filtered)
+	}
+	end := startIdx + amount
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	page := filtered[startIdx:end]
+
+	out := make([]*model.Credential, len(page))
+	for i, c := range page {
+		nc := *c
+		nc.SecretAccessKey = ""
+		nc.SecretAccessKeyEncryptedBytes = nil
+		out[i] = &nc
+	}
+
+	paginator := &model.Paginator{
+		Amount:        len(out),
+		NextPageToken: "",
+	}
+	if end < len(filtered) && len(out) > 0 {
+		paginator.NextPageToken = out[len(out)-1].AccessKeyID
+	}
+	return out, paginator, nil
 }
 
 func (s *BasicAuthService) AttachPolicyToUser(_ context.Context, _, _ string) error {
