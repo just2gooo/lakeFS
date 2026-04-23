@@ -378,7 +378,7 @@ func newClientFromGroup(t *testing.T, context context.Context, logger logging.Lo
 	}
 
 	// give the user access credentials
-	r, err := client.CreateCredentialsWithResponse(context, userID)
+	r, err := client.CreateCredentialsWithResponse(context, userID, &apigen.CreateCredentialsParams{})
 	require.NoErrorf(t, err, "Failed to create credentials for user %s", userID)
 	require.Equalf(t, http.StatusCreated, r.StatusCode(), "Failed to create credentials for user %s", userID)
 

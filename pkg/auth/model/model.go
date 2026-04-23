@@ -178,6 +178,8 @@ type BaseCredential struct {
 
 type Credential struct {
 	Username string
+	// ReadOnly is set for OSS read-only access keys (see CreateCredentials read_only).
+	ReadOnly bool
 	BaseCredential
 }
 
@@ -310,6 +312,7 @@ func CredentialFromProto(s crypt.SecretStore, pb *CredentialData) (*Credential, 
 	}
 	return &Credential{
 		Username: string(pb.UserId),
+		ReadOnly: pb.ReadOnly,
 		BaseCredential: BaseCredential{
 			AccessKeyID:                   pb.AccessKeyId,
 			SecretAccessKey:               secret,
@@ -325,6 +328,7 @@ func ProtoFromCredential(c *Credential) *CredentialData {
 		SecretAccessKeyEncryptedBytes: c.SecretAccessKeyEncryptedBytes,
 		IssuedDate:                    timestamppb.New(c.IssuedDate),
 		UserId:                        []byte(c.Username),
+		ReadOnly:                      c.ReadOnly,
 	}
 }
 

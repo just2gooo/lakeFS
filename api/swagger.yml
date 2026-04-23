@@ -1122,6 +1122,9 @@ components:
           type: integer
           format: int64
           description: Unix Epoch in seconds
+        read_only:
+          type: boolean
+          description: True if this access key is restricted to read-only operations (OSS).
 
     CredentialsList:
       type: object
@@ -1147,6 +1150,9 @@ components:
           type: string
         secret_access_key:
           type: string
+        read_only:
+          type: boolean
+          description: True if this access key is restricted to read-only operations (OSS).
         creation_date:
           type: integer
           format: int64
@@ -2772,6 +2778,13 @@ paths:
         - auth
       operationId: createCredentials
       summary: create credentials
+      parameters:
+        - name: read_only
+          in: query
+          description: If true, the new access key can only perform read operations (REST API and S3 Gateway). OSS only.
+          schema:
+            type: boolean
+            default: false
       responses:
         201:
           description: credentials

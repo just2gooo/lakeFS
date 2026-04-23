@@ -97,7 +97,7 @@ func createInitialDataSet(t *testing.T, ctx context.Context, svc auth.Service, u
 			t.Fatalf("CreateUser(%s): %s", userName, err)
 		}
 		for range 2 {
-			_, err := svc.CreateCredentials(ctx, userName)
+			_, err := svc.CreateCredentials(ctx, userName, false)
 			if err != nil {
 				t.Errorf("CreateCredentials(%s): %s", userName, err)
 			}

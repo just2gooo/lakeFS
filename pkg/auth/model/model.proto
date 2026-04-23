@@ -45,6 +45,9 @@ message CredentialData {
   bytes secret_access_key_encrypted_bytes = 2;
   google.protobuf.Timestamp issued_date = 3;
   bytes user_id = 4;
+  // When true, this access key may only perform read-only API and S3 operations (OSS basic auth).
+  // Field number chosen high to reduce collision risk when rebasing onto upstream that may add low-numbered fields.
+  bool read_only = 1024;
 }
 
 // message data model for model.Statement struct

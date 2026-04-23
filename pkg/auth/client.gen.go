@@ -36,6 +36,9 @@ type Credentials struct {
 
 	// Unix Epoch in seconds
 	CreationDate int64 `json:"creation_date"`
+
+	// True if this access key is restricted to read-only operations.
+	ReadOnly *bool `json:"read_only,omitempty"`
 }
 
 // CredentialsList defines model for CredentialsList.
@@ -51,7 +54,10 @@ type CredentialsWithSecret struct {
 	AccessKeyId string `json:"access_key_id"`
 
 	// Unix Epoch in seconds.
-	CreationDate    int64  `json:"creation_date"`
+	CreationDate int64 `json:"creation_date"`
+
+	// True if this access key is restricted to read-only operations.
+	ReadOnly        *bool  `json:"read_only,omitempty"`
 	SecretAccessKey string `json:"secret_access_key"`
 	UserId          int64  `json:"user_id"`
 
@@ -359,6 +365,9 @@ type ListUserCredentialsParams struct {
 type CreateCredentialsParams struct {
 	AccessKey *string `json:"access_key,omitempty"`
 	SecretKey *string `json:"secret_key,omitempty"`
+
+	// If true, the new access key can only perform read operations.
+	ReadOnly *bool `json:"read_only,omitempty"`
 }
 
 // DeleteUserExternalPrincipalParams defines parameters for DeleteUserExternalPrincipal.
@@ -2517,6 +2526,22 @@ func NewCreateCredentialsRequest(server string, userId string, params *CreateCre
 	if params.SecretKey != nil {
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "secret_key", runtime.ParamLocationQuery, *params.SecretKey); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+	}
+
+	if params.ReadOnly != nil {
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "read_only", runtime.ParamLocationQuery, *params.ReadOnly); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err

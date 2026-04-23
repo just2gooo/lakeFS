@@ -25,10 +25,10 @@ func TestBasicAuthService_MaxCredentialsPerUser(t *testing.T) {
 	require.NoError(t, err)
 
 	for range MaxCredentialsPerUser {
-		_, err := s.CreateCredentials(ctx, username)
+		_, err := s.CreateCredentials(ctx, username, false)
 		require.NoError(t, err)
 	}
-	_, err = s.CreateCredentials(ctx, username)
+	_, err = s.CreateCredentials(ctx, username, false)
 	require.ErrorIs(t, err, ErrInvalidRequest)
 }
 
@@ -43,7 +43,7 @@ func TestBasicAuthService_DeleteLastCredentialRejected(t *testing.T) {
 	username := "solo"
 	_, err := s.CreateUser(ctx, &model.User{Username: username})
 	require.NoError(t, err)
-	creds, err := s.CreateCredentials(ctx, username)
+	creds, err := s.CreateCredentials(ctx, username, false)
 	require.NoError(t, err)
 
 	err = s.DeleteCredentials(ctx, username, creds.AccessKeyID)
@@ -64,7 +64,7 @@ func TestBasicAuthService_DeleteCredentialsEvictsLRUCache(t *testing.T) {
 	username := "cached"
 	_, err := s.CreateUser(ctx, &model.User{Username: username})
 	require.NoError(t, err)
-	first, err := s.CreateCredentials(ctx, username)
+	first, err := s.CreateCredentials(ctx, username, false)
 	require.NoError(t, err)
 	second, err := s.AddCredentials(ctx, username, "AKIAEXPLICITKEY0001", "explicit-secret-one")
 	require.NoError(t, err)

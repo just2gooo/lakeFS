@@ -420,10 +420,11 @@ func (c *Controller) ListUserCredentials(w http.ResponseWriter, r *http.Request,
 			Results:    paginator.Amount,
 		},
 	}
-	for _, c := range credentials {
+	for _, cred := range credentials {
 		response.Results = append(response.Results, apigen.Credentials{
-			AccessKeyId:  c.AccessKeyID,
-			CreationDate: c.IssuedDate.Unix(),
+			AccessKeyId:  cred.AccessKeyID,
+			CreationDate: cred.IssuedDate.Unix(),
+			ReadOnly:     swag.Bool(cred.ReadOnly),
 		})
 	}
 	writeResponse(w, http.StatusOK, response)
@@ -435,10 +436,11 @@ func (c *Controller) CreateCredentials(w http.ResponseWriter, r *http.Request, u
 		credentials *model.Credential
 		err         error
 	)
+	readOnly := params.ReadOnly != nil && *params.ReadOnly
 	if params.AccessKey != nil && params.SecretKey != nil {
 		credentials, err = c.Auth.AddCredentials(ctx, userID, *params.AccessKey, *params.SecretKey)
 	} else {
-		credentials, err = c.Auth.CreateCredentials(ctx, userID)
+		credentials, err = c.Auth.CreateCredentials(ctx, userID, readOnly)
 	}
 	if c.handleAPIError(w, err) {
 		return
@@ -449,6 +451,7 @@ func (c *Controller) CreateCredentials(w http.ResponseWriter, r *http.Request, u
 		AccessKeyId:     credentials.AccessKeyID,
 		SecretAccessKey: credentials.SecretAccessKey,
 		CreationDate:    credentials.IssuedDate.Unix(),
+		ReadOnly:        swag.Bool(credentials.ReadOnly),
 	}
 	writeResponse(w, http.StatusCreated, response)
 }
@@ -479,6 +482,7 @@ func (c *Controller) GetCredentialsForUser(w http.ResponseWriter, r *http.Reques
 	response := apigen.Credentials{
 		AccessKeyId:  credentials.AccessKeyID,
 		CreationDate: credentials.IssuedDate.Unix(),
+		ReadOnly:     swag.Bool(credentials.ReadOnly),
 	}
 	writeResponse(w, http.StatusOK, response)
 }

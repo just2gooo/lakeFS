@@ -9,7 +9,8 @@ import (
 type contextKey string
 
 const (
-	userContextKey contextKey = "user"
+	userContextKey               contextKey = "user"
+	credentialReadOnlyContextKey contextKey = "credential_read_only"
 )
 
 func GetUser(ctx context.Context) (*model.User, error) {
@@ -33,7 +34,21 @@ func WithoutUser(ctx context.Context) context.Context {
 
 func CopyUserFromContext(srcCtx, dstCtx context.Context) context.Context {
 	if user, _ := GetUser(srcCtx); user != nil {
-		return WithUser(dstCtx, user)
+		dstCtx = WithUser(dstCtx, user)
+	}
+	if CredentialReadOnlyFromContext(srcCtx) {
+		dstCtx = WithCredentialReadOnly(dstCtx, true)
 	}
 	return dstCtx
+}
+
+// WithCredentialReadOnly marks the request as authenticated with a read-only access key (OSS).
+func WithCredentialReadOnly(ctx context.Context, readOnly bool) context.Context {
+	return context.WithValue(ctx, credentialReadOnlyContextKey, readOnly)
+}
+
+// CredentialReadOnlyFromContext reports whether the current request used a read-only access key.
+func CredentialReadOnlyFromContext(ctx context.Context) bool {
+	v, ok := ctx.Value(credentialReadOnlyContextKey).(bool)
+	return ok && v
 }

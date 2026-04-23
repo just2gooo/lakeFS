@@ -39,10 +39,15 @@ var authUsersCredentialsList = &cobra.Command{
 		rows := make([][]any, len(credentials))
 		for i, c := range credentials {
 			ts := time.Unix(c.CreationDate, 0).String()
-			rows[i] = []any{c.AccessKeyId, ts}
+			// 与 API read_only 对应：可读标签，避免裸 boolean 不易理解
+			mode := "read-write"
+			if c.ReadOnly != nil && *c.ReadOnly {
+				mode = "read-only"
+			}
+			rows[i] = []any{c.AccessKeyId, ts, mode}
 		}
 		pagination := resp.JSON200.Pagination
-		PrintTable(rows, []any{"Access Key ID", "Issued Date"}, &pagination, amount)
+		PrintTable(rows, []any{"Access Key ID", "Issued Date", "Mode"}, &pagination, amount)
 	},
 }
 

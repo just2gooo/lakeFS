@@ -1868,6 +1868,7 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 	tests := []struct {
 		name               string
 		username           string
+		readOnly           bool
 		returnedAccessKey  string
 		returnedSecretKey  string
 		email              string
@@ -1881,6 +1882,7 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 		{
 			name:               "successful",
 			username:           "foo",
+			readOnly:           false,
 			returnedAccessKey:  "AKIA",
 			returnedSecretKey:  "AKIASECRET",
 			email:              "foo@gmail.com",
@@ -1893,6 +1895,7 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 		{
 			name:               "invalid_username",
 			username:           "",
+			readOnly:           false,
 			returnedAccessKey:  "AKIA",
 			returnedSecretKey:  "AKIASECRET",
 			email:              "foo@gmail.com",
@@ -1904,6 +1907,7 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 		{
 			name:               "internal_error",
 			username:           "credentials",
+			readOnly:           false,
 			returnedAccessKey:  "AKIA",
 			returnedSecretKey:  "AKIASECRET",
 			email:              "foo@gmail.com",
@@ -1914,12 +1918,26 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 		{
 			name:               "internal_error",
 			username:           "credentials",
+			readOnly:           false,
 			returnedAccessKey:  "AKIA",
 			returnedSecretKey:  "AKIASECRET",
 			email:              "foo@gmail.com",
 			source:             "internal",
 			responseStatusCode: http.StatusInternalServerError,
 			expectedErr:        auth.ErrInternalServerError,
+		},
+		{
+			name:               "read_only_ok",
+			username:           "foo",
+			readOnly:           true,
+			returnedAccessKey:  "AKIA",
+			returnedSecretKey:  "AKIASECRET",
+			email:              "foo@gmail.com",
+			friendlyName:       "friendly foo",
+			source:             "internal",
+			responseName:       "foo",
+			responseStatusCode: http.StatusCreated,
+			expectedErr:        nil,
 		},
 	}
 	for _, tt := range tests {
@@ -1931,11 +1949,16 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 				JSON201: &auth.CredentialsWithSecret{
 					AccessKeyId:     tt.returnedAccessKey,
 					SecretAccessKey: tt.returnedSecretKey,
+					ReadOnly:        swag.Bool(tt.readOnly),
 				},
 			}
-			mockClient.EXPECT().CreateCredentialsWithResponse(gomock.Any(), tt.username, &auth.CreateCredentialsParams{}).Return(response, nil)
+			wantParams := &auth.CreateCredentialsParams{}
+			if tt.readOnly {
+				wantParams.ReadOnly = swag.Bool(true)
+			}
+			mockClient.EXPECT().CreateCredentialsWithResponse(gomock.Any(), tt.username, wantParams).Return(response, nil)
 			ctx := t.Context()
-			resCredentials, err := s.CreateCredentials(ctx, tt.username)
+			resCredentials, err := s.CreateCredentials(ctx, tt.username, tt.readOnly)
 			if !errors.Is(err, tt.expectedErr) {
 				t.Fatalf("CreateCredentials: expected err: %v got: %v", tt.expectedErr, err)
 			}
@@ -1947,6 +1970,9 @@ func TestAPIAuthService_CreateCredentials(t *testing.T) {
 			}
 			if resCredentials.SecretAccessKey != tt.returnedSecretKey {
 				t.Errorf("expected secretKeyID:%s, got:%s", tt.returnedSecretKey, resCredentials.SecretAccessKey)
+			}
+			if err == nil && resCredentials.ReadOnly != tt.readOnly {
+				t.Errorf("expected ReadOnly:%v, got:%v", tt.readOnly, resCredentials.ReadOnly)
 			}
 		})
 	}

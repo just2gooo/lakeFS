@@ -1308,7 +1308,7 @@ func TestDeleteObjects_Viewer(t *testing.T) {
 	require.NoError(t, err, "Failed to add user to Viewers group")
 	require.Equal(t, http.StatusCreated, resAssociateUser.StatusCode(), "AddGroupMembershipWithResponse unexpectedly status code")
 
-	resCreateCreds, err := client.CreateCredentialsWithResponse(ctx, "del-viewer")
+	resCreateCreds, err := client.CreateCredentialsWithResponse(ctx, "del-viewer", &apigen.CreateCredentialsParams{})
 	require.NoError(t, err, "Failed to create credentials")
 	require.NotNil(t, resCreateCreds.JSON201, "CreateCredentials unexpectedly empty response")
 

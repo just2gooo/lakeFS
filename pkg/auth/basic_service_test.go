@@ -12,6 +12,7 @@ import (
 	"github.com/treeverse/lakefs/pkg/kv"
 	"github.com/treeverse/lakefs/pkg/kv/kvtest"
 	"github.com/treeverse/lakefs/pkg/logging"
+	"github.com/treeverse/lakefs/pkg/permissions"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -88,7 +89,7 @@ func TestBasicAuthService_Credentials(t *testing.T) {
 	require.ErrorIs(t, err, auth.ErrNotFound)
 
 	// Create credentials no user
-	_, err = s.CreateCredentials(ctx, username)
+	_, err = s.CreateCredentials(ctx, username, false)
 	require.ErrorIs(t, err, auth.ErrNotFound)
 
 	// Add credentials no user
@@ -107,7 +108,7 @@ func TestBasicAuthService_Credentials(t *testing.T) {
 	require.ErrorIs(t, err, auth.ErrNotFound)
 
 	// Create credentials for user
-	creds, err := s.CreateCredentials(ctx, username)
+	creds, err := s.CreateCredentials(ctx, username, false)
 	require.NoError(t, err)
 
 	// Get credentials
@@ -134,6 +135,63 @@ func TestBasicAuthService_Credentials(t *testing.T) {
 	require.ErrorIs(t, err, auth.ErrNotFound)
 	_, err = s.GetCredentials(ctx, accessKeyID)
 	require.NoError(t, err)
+}
+
+func TestBasicAuthService_ReadOnlyCredential(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _ := SetupService(t, secret)
+	username := "ro-user"
+	_, err := s.CreateUser(ctx, &model.User{Username: username})
+	require.NoError(t, err)
+
+	ro, err := s.CreateCredentials(ctx, username, true)
+	require.NoError(t, err)
+	require.True(t, ro.ReadOnly)
+	got, err := s.GetCredentials(ctx, ro.AccessKeyID)
+	require.NoError(t, err)
+	require.True(t, got.ReadOnly)
+
+	ctxRO := auth.WithCredentialReadOnly(ctx, true)
+	deny, err := s.Authorize(ctxRO, &auth.AuthorizationRequest{
+		Username: username,
+		RequiredPermissions: permissions.Node{
+			Type: permissions.NodeTypeNode,
+			Permission: permissions.Permission{
+				Action:   permissions.WriteObjectAction,
+				Resource: permissions.ObjectArn("repo", "obj"),
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.False(t, deny.Allowed)
+
+	allow, err := s.Authorize(ctxRO, &auth.AuthorizationRequest{
+		Username: username,
+		RequiredPermissions: permissions.Node{
+			Type: permissions.NodeTypeNode,
+			Permission: permissions.Permission{
+				Action:   permissions.ListRepositoriesAction,
+				Resource: permissions.All,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, allow.Allowed)
+
+	ctxRW := auth.WithCredentialReadOnly(ctx, false)
+	allowWrite, err := s.Authorize(ctxRW, &auth.AuthorizationRequest{
+		Username: username,
+		RequiredPermissions: permissions.Node{
+			Type: permissions.NodeTypeNode,
+			Permission: permissions.Permission{
+				Action:   permissions.WriteObjectAction,
+				Resource: permissions.ObjectArn("repo", "obj"),
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, allowWrite.Allowed)
 }
 
 func TestBasicAuthService_CredentialsImport(t *testing.T) {

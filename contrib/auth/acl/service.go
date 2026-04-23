@@ -733,9 +733,12 @@ func (s *AuthService) ListPolicies(ctx context.Context, params *model.Pagination
 	return model.ConvertPolicyDataList(msgs), paginator, err
 }
 
-func (s *AuthService) CreateCredentials(ctx context.Context, username string) (*model.Credential, error) {
+func (s *AuthService) CreateCredentials(ctx context.Context, username string, readOnly bool) (*model.Credential, error) {
 	accessKeyID := keys.GenAccessKeyID()
 	secretAccessKey := keys.GenSecretAccessKey()
+	if readOnly {
+		return nil, auth.ErrInvalidRequest
+	}
 	return s.AddCredentials(ctx, username, accessKeyID, secretAccessKey)
 }
 

@@ -1859,16 +1859,17 @@ func (c *Controller) ListUserCredentials(w http.ResponseWriter, r *http.Request,
 			Results:    paginator.Amount,
 		},
 	}
-	for _, c := range credentials {
+	for _, cred := range credentials {
 		response.Results = append(response.Results, apigen.Credentials{
-			AccessKeyId:  c.AccessKeyID,
-			CreationDate: c.IssuedDate.Unix(),
+			AccessKeyId:  cred.AccessKeyID,
+			CreationDate: cred.IssuedDate.Unix(),
+			ReadOnly:     apiutil.Ptr(cred.ReadOnly),
 		})
 	}
 	writeResponse(w, r, http.StatusOK, response)
 }
 
-func (c *Controller) CreateCredentials(w http.ResponseWriter, r *http.Request, userID string) {
+func (c *Controller) CreateCredentials(w http.ResponseWriter, r *http.Request, userID string, params apigen.CreateCredentialsParams) {
 	if !c.authorize(w, r, permissions.Node{
 		Permission: permissions.Permission{
 			Action:   permissions.CreateCredentialsAction,
@@ -1879,7 +1880,8 @@ func (c *Controller) CreateCredentials(w http.ResponseWriter, r *http.Request, u
 	}
 	ctx := r.Context()
 	c.LogAction(ctx, "create_credentials", r, "", "", "")
-	credentials, err := c.Auth.CreateCredentials(ctx, userID)
+	readOnly := params.ReadOnly != nil && *params.ReadOnly
+	credentials, err := c.Auth.CreateCredentials(ctx, userID, readOnly)
 	if c.handleAPIError(ctx, w, r, err) {
 		return
 	}
@@ -1887,6 +1889,7 @@ func (c *Controller) CreateCredentials(w http.ResponseWriter, r *http.Request, u
 		AccessKeyId:     credentials.AccessKeyID,
 		SecretAccessKey: credentials.SecretAccessKey,
 		CreationDate:    credentials.IssuedDate.Unix(),
+		ReadOnly:        apiutil.Ptr(credentials.ReadOnly),
 	}
 	writeResponse(w, r, http.StatusCreated, response)
 }
@@ -1937,6 +1940,7 @@ func (c *Controller) GetCredentials(w http.ResponseWriter, r *http.Request, user
 	response := apigen.Credentials{
 		AccessKeyId:  credentials.AccessKeyID,
 		CreationDate: credentials.IssuedDate.Unix(),
+		ReadOnly:     apiutil.Ptr(credentials.ReadOnly),
 	}
 	writeResponse(w, r, http.StatusOK, response)
 }

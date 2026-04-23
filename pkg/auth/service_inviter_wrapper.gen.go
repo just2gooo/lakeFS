@@ -317,11 +317,11 @@ func (w *MonitoredServiceAndInviter) ListUserExternalPrincipals(ctx context.Cont
 	w.Observe(op, time.Since(start), r2 == nil)
 	return r0, r1, r2
 }
-func (w *MonitoredServiceAndInviter) CreateCredentials(ctx context.Context, username string) (*model.Credential, error) {
+func (w *MonitoredServiceAndInviter) CreateCredentials(ctx context.Context, username string, readOnly bool) (*model.Credential, error) {
 	const op = "create_credentials"
 	start := time.Now()
 
-	r0, r1 := w.Wrapped.CreateCredentials(ctx, username)
+	r0, r1 := w.Wrapped.CreateCredentials(ctx, username, readOnly)
 	w.Observe(op, time.Since(start), r1 == nil)
 	return r0, r1
 }

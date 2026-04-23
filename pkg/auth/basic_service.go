@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	BasicPartitionKey     = "basicAuth"
-	SuperAdminKey         = "superAdmin"
-	MaxUsers              = 1
+	BasicPartitionKey = "basicAuth"
+	SuperAdminKey     = "superAdmin"
+	MaxUsers          = 1
 	// MaxCredentialsPerUser is the maximum S3-style access keys for the single basic-auth admin user.
 	MaxCredentialsPerUser = 10
 )
@@ -116,7 +116,17 @@ func (s *BasicAuthService) Authorize(ctx context.Context, req *AuthorizationRequ
 		return nil, err
 	}
 
-	// If user exists - single admin user - allow
+	if CredentialReadOnlyFromContext(ctx) {
+		for _, action := range collectPermActions(req.RequiredPermissions) {
+			if !ActionPermittedForReadOnlyCredential(action) {
+				return &AuthorizationResponse{
+					Allowed: false,
+					Error:   fmt.Errorf("%w: read-only access key", ErrInsufficientPermissions),
+				}, nil
+			}
+		}
+	}
+
 	return &AuthorizationResponse{Allowed: true}, nil
 }
 
@@ -218,14 +228,28 @@ func (s *BasicAuthService) GetCredentialsForUser(ctx context.Context, username, 
 	return s.GetCredentials(ctx, accessKeyID)
 }
 
-func (s *BasicAuthService) CreateCredentials(ctx context.Context, username string) (*model.Credential, error) {
+func (s *BasicAuthService) CreateCredentials(ctx context.Context, username string, readOnly bool) (*model.Credential, error) {
 	accessKeyID := keys.GenAccessKeyID()
 	secretAccessKey := keys.GenSecretAccessKey()
 	user, err := s.GetUser(ctx, username)
 	if err != nil {
 		return nil, err
 	}
-	return s.AddCredentials(ctx, user.Username, accessKeyID, secretAccessKey)
+	if err := s.enforceMaxCredentials(ctx); err != nil {
+		return nil, err
+	}
+	return s.addCredentials(ctx, user.Username, accessKeyID, secretAccessKey, readOnly)
+}
+
+func (s *BasicAuthService) enforceMaxCredentials(ctx context.Context) error {
+	currCreds, err := s.listUserCredentials(ctx, SuperAdminKey, BasicPartitionKey, "")
+	if err != nil {
+		return err
+	}
+	if len(currCreds) >= MaxCredentialsPerUser {
+		return fmt.Errorf("exceeded number of allowed credentials: %w", ErrInvalidRequest)
+	}
+	return nil
 }
 
 func (s *BasicAuthService) AddCredentials(ctx context.Context, username, accessKeyID, secretAccessKey string) (*model.Credential, error) {
@@ -234,13 +258,8 @@ func (s *BasicAuthService) AddCredentials(ctx context.Context, username, accessK
 		return nil, err
 	}
 
-	currCreds, err := s.listUserCredentials(ctx, SuperAdminKey, BasicPartitionKey, "")
-	if err != nil {
+	if err := s.enforceMaxCredentials(ctx); err != nil {
 		return nil, err
-	}
-	// TODO (niro): Support swap?
-	if len(currCreds) >= MaxCredentialsPerUser {
-		return nil, fmt.Errorf("exceeded number of allowed credentials: %w", ErrInvalidRequest)
 	}
 
 	// Handle user import flow from previous auth service
@@ -253,7 +272,7 @@ func (s *BasicAuthService) AddCredentials(ctx context.Context, username, accessK
 		return s.importUserCredentials(ctx, username, accessKeyID)
 	}
 
-	return s.addCredentials(ctx, username, accessKeyID, secretAccessKey)
+	return s.addCredentials(ctx, username, accessKeyID, secretAccessKey, false)
 }
 
 func (s *BasicAuthService) importUserCredentials(ctx context.Context, username, accessKeyID string) (*model.Credential, error) {
@@ -265,26 +284,27 @@ func (s *BasicAuthService) importUserCredentials(ctx context.Context, username, 
 	case 0:
 		return nil, fmt.Errorf("no credentials found for user (%s): %w", username, ErrNotFound)
 	case 1:
-		return s.addCredentials(ctx, username, creds[0].AccessKeyID, creds[0].SecretAccessKey)
+		return s.addCredentials(ctx, username, creds[0].AccessKeyID, creds[0].SecretAccessKey, false)
 	default: // more than 1 credential for user
 		return nil, fmt.Errorf("too many credentials for user (%s): %w", username, ErrInvalidRequest)
 	}
 }
 
-func (s *BasicAuthService) addCredentials(ctx context.Context, username, accessKeyID, secretAccessKey string) (*model.Credential, error) {
+func (s *BasicAuthService) addCredentials(ctx context.Context, username, accessKeyID, secretAccessKey string, readOnly bool) (*model.Credential, error) {
 	encryptedKey, err := model.EncryptSecret(s.secretStore, secretAccessKey)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
 	c := &model.Credential{
+		Username: username,
+		ReadOnly: readOnly,
 		BaseCredential: model.BaseCredential{
 			AccessKeyID:                   accessKeyID,
 			SecretAccessKey:               secretAccessKey,
 			SecretAccessKeyEncryptedBytes: encryptedKey,
 			IssuedDate:                    now,
 		},
-		Username: username,
 	}
 	credentialsKey := model.CredentialPath(SuperAdminKey, c.AccessKeyID)
 	err = kv.SetMsgIf(ctx, s.store, BasicPartitionKey, credentialsKey, model.ProtoFromCredential(c), nil)

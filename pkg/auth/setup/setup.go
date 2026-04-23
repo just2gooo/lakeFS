@@ -211,7 +211,7 @@ func AddAdminUser(ctx context.Context, authService auth.Service, user *model.Sup
 	var creds *model.Credential
 	if user.AccessKeyID == "" {
 		// Generate and return a key pair
-		creds, err = authService.CreateCredentials(ctx, user.Username)
+		creds, err = authService.CreateCredentials(ctx, user.Username, false)
 		if err != nil {
 			return nil, fmt.Errorf("create credentials for %s: %w", user.Username, err)
 		}

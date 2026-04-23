@@ -72,6 +72,7 @@ func AuthenticationHandler(authService auth.GatewayService, next http.Handler) h
 			return
 		}
 		ctx = logging.AddFields(ctx, logging.Fields{logging.UserFieldKey: user.Username})
+		ctx = auth.WithCredentialReadOnly(ctx, creds.ReadOnly)
 		ctx = auth.WithUser(ctx, user)
 		ctx = context.WithValue(ctx, ContextKeyAuthContext, authContext)
 		req = req.WithContext(ctx)

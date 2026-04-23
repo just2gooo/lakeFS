@@ -317,8 +317,11 @@ type CredentialData struct {
 	SecretAccessKeyEncryptedBytes []byte                 `protobuf:"bytes,2,opt,name=secret_access_key_encrypted_bytes,json=secretAccessKeyEncryptedBytes,proto3" json:"secret_access_key_encrypted_bytes,omitempty"`
 	IssuedDate                    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=issued_date,json=issuedDate,proto3" json:"issued_date,omitempty"`
 	UserId                        []byte                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	// When true, this access key may only perform read-only API and S3 operations (OSS basic auth).
+	// Field number chosen high to reduce collision risk when rebasing onto upstream that may add low-numbered fields.
+	ReadOnly      bool `protobuf:"varint,1024,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CredentialData) Reset() {
@@ -377,6 +380,13 @@ func (x *CredentialData) GetUserId() []byte {
 		return x.UserId
 	}
 	return nil
+}
+
+func (x *CredentialData) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
 }
 
 // message data model for model.Statement struct
@@ -731,13 +741,14 @@ const file_auth_model_model_proto_rawDesc = "" +
 	"\n" +
 	"statements\x18\x03 \x03(\v2-.io.treeverse.lakefs.auth.model.StatementDataR\n" +
 	"statements\x129\n" +
-	"\x03acl\x18\x04 \x01(\v2'.io.treeverse.lakefs.auth.model.ACLDataR\x03acl\"\xd4\x01\n" +
+	"\x03acl\x18\x04 \x01(\v2'.io.treeverse.lakefs.auth.model.ACLDataR\x03acl\"\xf2\x01\n" +
 	"\x0eCredentialData\x12\"\n" +
 	"\raccess_key_id\x18\x01 \x01(\tR\vaccessKeyId\x12H\n" +
 	"!secret_access_key_encrypted_bytes\x18\x02 \x01(\fR\x1dsecretAccessKeyEncryptedBytes\x12;\n" +
 	"\vissued_date\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"issuedDate\x12\x17\n" +
-	"\auser_id\x18\x04 \x01(\fR\x06userId\"\xa8\x02\n" +
+	"\auser_id\x18\x04 \x01(\fR\x06userId\x12\x1c\n" +
+	"\tread_only\x18\x80\b \x01(\bR\breadOnly\"\xa8\x02\n" +
 	"\rStatementData\x12\x16\n" +
 	"\x06effect\x18\x01 \x01(\tR\x06effect\x12\x16\n" +
 	"\x06action\x18\x02 \x03(\tR\x06action\x12\x1a\n" +

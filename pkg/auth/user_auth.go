@@ -23,17 +23,24 @@ func UserByToken(ctx context.Context, authService Service, tokenString string) (
 }
 
 func UserByAuth(ctx context.Context, authenticator Authenticator, authService Service, accessKey string, secretKey string) (*model.User, error) {
+	user, _, err := UserByBasicCredentials(ctx, authenticator, authService, accessKey, secretKey)
+	return user, err
+}
+
+// UserByBasicCredentials authenticates S3-style access key + secret and returns the user and whether the key is read-only.
+func UserByBasicCredentials(ctx context.Context, authenticator Authenticator, authService Service, accessKey, secretKey string) (*model.User, bool, error) {
 	username, err := authenticator.AuthenticateUser(ctx, accessKey, secretKey)
 	if err != nil {
-		// Wrap authentication-specific errors to ensure they return 401 instead of 404/500
 		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidSecretAccessKey) {
-			return nil, fmt.Errorf("%w (access key %s): %w", ErrAuthenticatingRequest, accessKey, err)
+			return nil, false, fmt.Errorf("%w (access key %s): %w", ErrAuthenticatingRequest, accessKey, err)
 		}
-		return nil, fmt.Errorf("authenticate access key %s: %w", accessKey, err)
+		return nil, false, fmt.Errorf("authenticate access key %s: %w", accessKey, err)
 	}
+	cred, err := authService.GetCredentials(ctx, accessKey)
+	readOnly := err == nil && cred != nil && cred.ReadOnly
 	user, err := authService.GetUser(ctx, username)
 	if err != nil {
-		return nil, fmt.Errorf("get user %s: %w", username, err)
+		return nil, false, fmt.Errorf("get user %s: %w", username, err)
 	}
-	return user, nil
+	return user, readOnly, nil
 }

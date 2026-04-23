@@ -85,7 +85,7 @@ type Authorizer interface {
 }
 
 type CredentialsCreator interface {
-	CreateCredentials(ctx context.Context, username string) (*model.Credential, error)
+	CreateCredentials(ctx context.Context, username string, readOnly bool) (*model.Credential, error)
 }
 
 type EmailInviter interface {
@@ -705,9 +705,13 @@ func (a *APIAuthService) ListPolicies(ctx context.Context, params *model.Paginat
 	return policies, toPagination(resp.JSON200.Pagination), nil
 }
 
-func (a *APIAuthService) CreateCredentials(ctx context.Context, username string) (*model.Credential, error) {
+func (a *APIAuthService) CreateCredentials(ctx context.Context, username string, readOnly bool) (*model.Credential, error) {
 	ctx = httputil.SetClientTrace(ctx, "api_auth")
-	resp, err := a.apiClient.CreateCredentialsWithResponse(ctx, username, &CreateCredentialsParams{})
+	params := &CreateCredentialsParams{}
+	if readOnly {
+		params.ReadOnly = swag.Bool(true)
+	}
+	resp, err := a.apiClient.CreateCredentialsWithResponse(ctx, username, params)
 	if err != nil {
 		a.logger.WithError(err).WithField("username", username).Error("failed to create credentials")
 		return nil, err
@@ -716,8 +720,13 @@ func (a *APIAuthService) CreateCredentials(ctx context.Context, username string)
 		return nil, err
 	}
 	credentials := resp.JSON201
+	credReadOnly := false
+	if credentials.ReadOnly != nil {
+		credReadOnly = *credentials.ReadOnly
+	}
 	return &model.Credential{
 		Username: strconv.Itoa(0),
+		ReadOnly: credReadOnly,
 		BaseCredential: model.BaseCredential{
 			AccessKeyID:     credentials.AccessKeyId,
 			SecretAccessKey: credentials.SecretAccessKey,
